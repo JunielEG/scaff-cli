@@ -4,6 +4,8 @@ setlocal
 set "TOOL_NAME=scaff-cli"
 set "REPO_URL=https://github.com/JunielEG/scaff-cli.git"
 set "INSTALL_DIR=%USERPROFILE%\ScaffoldingTools\%TOOL_NAME%"
+set "CLOSE_LOCAL=false"
+if /i "%~1"=="closeLocal" set "CLOSE_LOCAL=true"
 
 echo.
 echo   %TOOL_NAME%  installer
@@ -16,7 +18,7 @@ if exist "%~dp0windows\scaffx.bat" (
 ) else (
     echo   source    cloning from remote...
     git clone "%REPO_URL%" "%TEMP%\%TOOL_NAME%-install"
-    if errorlevel 1 (
+    if errorlevel 1 (   
         echo   source    x clone failed
         pause & exit /b 1
     )
@@ -49,6 +51,10 @@ rem )
 rem -- limpiar clone temporal --------------------------------------------------
 if exist "%TEMP%\%TOOL_NAME%-install" rmdir /s /q "%TEMP%\%TOOL_NAME%-install"
 
+rem -- crear autocompletar en PowerShell $PROFILE ------------------------------
+powershell -ExecutionPolicy Bypass -File "%SOURCE_DIR%\windows\setup-profile.ps1" -InstallDir "%INSTALL_DIR%"
+echo   profile   ^ function + autocomplete added
+
 rem -- PATH --------------------------------------------------------------------
 for /f "skip=2 tokens=3*" %%A in (
     'reg query "HKCU\Environment" /v PATH 2^>nul'
@@ -64,9 +70,10 @@ if errorlevel 1 (
 
 echo.
 if "%COPY_OK%"=="1" (
-    echo   done.  run:  scaffx
+    echo   done.  run:  scaffx help
 ) else (
     echo   done. advertencias.  revisa los warns arriba.
 )
 echo.
+if "%CLOSE_LOCAL%"=="false" ( pause )
 endlocal
