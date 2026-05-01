@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$cmd1,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$rest
@@ -165,7 +165,7 @@ function Show-Tree {
     $root = Get-Item (Get-Location).Path
 
     $count = (Get-ChildItem -LiteralPath $root.FullName -Recurse -ErrorAction SilentlyContinue).Count
-    if ($count -gt 50 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
+    if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
 
     $rootName = $root.Name
     Write-Header "tree      ->  $rootName$filterLabel"
@@ -180,7 +180,7 @@ function Write-Snapshot {
     $rootItem    = Get-Item (Get-Location).Path
 
     $count = (Get-ChildItem -LiteralPath $rootItem.FullName -Recurse -ErrorAction SilentlyContinue).Count
-    if ($count -gt 50 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
+    if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
 
     $rootName    = $rootItem.Name
     $outFile     = Join-Path $rootItem.FullName "$rootName.yaml"

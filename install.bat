@@ -26,9 +26,9 @@ if exist "%~dp0windows\scaffx.bat" (
 echo   install   %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
-xcopy /E /I /Y "%SOURCE_DIR%\templates"        "%INSTALL_DIR%\templates\" > nul
-copy  /Y        "%SOURCE_DIR%\windows\scaffx.bat" "%INSTALL_DIR%\scaffx.bat"  > nul
-copy  /Y        "%SOURCE_DIR%\windows\scaffx.ps1" "%INSTALL_DIR%\scaffx.ps1"  > nul
+xcopy /E /I /Y  "%SOURCE_DIR%\templates"          "%INSTALL_DIR%\templates\" > nul
+copy  /Y        "%SOURCE_DIR%\windows\scaffx.bat" "%INSTALL_DIR%\scaffx.bat" > nul
+copy  /Y        "%SOURCE_DIR%\windows\scaffx.ps1" "%INSTALL_DIR%\scaffx.ps1" > nul
 
 echo   files     ^ scaffx.bat, scaffx.ps1
 
