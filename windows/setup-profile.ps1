@@ -44,13 +44,13 @@ if ($content -match "(?s)# $toolCmd \[start\].*?# $toolCmd \[end\]") {
     $replacement = $block.Trim()
     $content = [regex]::Replace($content, $pattern, { $replacement })
     Set-Content -Path $profileFile -Value $content
-    Write-Host "  profile   ^  autocomplete updated"
+    Write-Host "  profile    ^  autocomplete updated"
     } else {
         # No existe, agregar al final
         Add-Content -Path $profileFile -Value $block
-        Write-Host "  profile   ^  autocomplete added"
+        Write-Host "  profile    ^  autocomplete added"
     }
 } else {
     Set-Content -Path $profileFile -Value $block
-    Write-Host "  profile   ^  autocomplete added"
+    Write-Host "  profile    ^  autocomplete added"
 }

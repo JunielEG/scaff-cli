@@ -4,6 +4,9 @@
     [string[]]$rest
 )
 
+$FILETEMPLATES = Join-Path $PSScriptRoot "templates/files"
+$ARCHTEMPLATES = Join-Path $PSScriptRoot "templates/architectures"
+
 # -- Parse flags and positional args from $rest -------------------------------
 
 $flags      = $rest | Where-Object { $_ -like "--*" }
@@ -12,6 +15,7 @@ $cmd2       = if ($positional.Count -gt 0) { $positional[0] } else { "" }
 
 $filesOnly = $flags -contains "--files-only"
 $dirsOnly  = $flags -contains "--dirs-only"
+$clean     = $flags -contains "--clean"
 
 if ($filesOnly -and $dirsOnly) {
     Write-Host ""
@@ -27,7 +31,8 @@ $COMMANDS = @(
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx tree <depth>";  Desc = "limita la profundidad del arbol (ej: scaffx tree 2)" },
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx snapshot";      Desc = "genera <raiz>.yaml con la estructura actual del folder" },
     [PSCustomObject]@{ Group = "flags";   Cmd = "  --files-only";       Desc = "incluye solo archivos (tree / snapshot)" },
-    [PSCustomObject]@{ Group = "flags";   Cmd = "  --dirs-only";        Desc = "incluye solo directorios (tree / snapshot)" }
+    [PSCustomObject]@{ Group = "flags";   Cmd = "  --dirs-only";        Desc = "incluye solo directorios (tree / snapshot)" },
+    [PSCustomObject]@{ Group = "flags";   Cmd = "  --clean";            Desc = "omite entradas segun .gitignore o scaffx.ignore (tree / snapshot)" }
 )
 
 # -- UI helpers ---------------------------------------------------------------
@@ -78,6 +83,72 @@ function Confirm([string]$msg) {
     return ($reply -match '^[Yy]')
 }
 
+function Get-Template([string]$file, [hashtable]$replacements) {
+    $path = Join-Path $FILETEMPLATES $file
+    if (-not (Test-Path $path)) {
+        Write-Fail "template no encontrado: $file"
+        return ""
+    }
+    $content = Get-Content $path -Raw
+    foreach ($key in $replacements.Keys) {
+        $content = $content -replace "{{${key}}}", $replacements[$key]
+    }
+    return $content
+}
+
+function Get-IgnorePatterns {
+    $gitignore = Join-Path (Get-Location).Path ".gitignore"
+    if (Test-Path $gitignore) {
+        $source = $gitignore
+    } else {
+        $source = Join-Path $FILETEMPLATES "scaffx.ignore"
+    }
+
+    if (-not (Test-Path $source)) { return @() }
+
+    $patterns = Get-Content $source | Where-Object {
+        $_ -and $_ -notmatch '^\s*#'   # omite vacias y comentarios
+    } | ForEach-Object { $_.Trim() }
+
+    return $patterns
+}
+
+function Test-Ignored {
+    param(
+        [System.IO.FileSystemInfo]$item,
+        [string[]]$patterns
+    )
+
+    if (-not $patterns -or $patterns.Count -eq 0) { return $false }
+
+    $name     = $item.Name
+    $fullPath = $item.FullName -replace '\\', '/'
+
+    foreach ($pattern in $patterns) {
+        $p = $pattern -replace '\\', '/'
+
+        # Patron de directorio (termina en /)
+        if ($p.EndsWith('/')) {
+            if ($item.PSIsContainer) {
+                $dirPattern = $p.TrimEnd('/')
+                if ($name -like $dirPattern) { return $true }
+            }
+            continue
+        }
+
+        # Patron con slash interno => match sobre la ruta completa
+        if ($p -match '/') {
+            if ($fullPath -like "*/$p") { return $true }
+            if ($fullPath -like "*/$p/*") { return $true }
+        } else {
+            # Sin slash => match solo sobre el nombre
+            if ($name -like $p) { return $true }
+        }
+    }
+
+    return $false
+}
+
 function Get-TreeLines {
     param(
         [string]$path,
@@ -85,7 +156,8 @@ function Get-TreeLines {
         [int]$depth = 0,
         [int]$maxDepth = -1,
         [bool]$onlyFiles = $false,
-        [bool]$onlyDirs  = $false
+        [bool]$onlyDirs  = $false,
+        [string[]]$ignorePatterns = @()
     )
 
     if ($maxDepth -ge 0 -and $depth -ge $maxDepth) { return }
@@ -100,6 +172,10 @@ function Get-TreeLines {
         $all
     }
 
+    if ($ignorePatterns.Count -gt 0) {
+        $visible = $visible | Where-Object { -not (Test-Ignored -item $_ -patterns $ignorePatterns) }
+    }
+
     for ($i = 0; $i -lt $visible.Count; $i++) {
         $item     = $visible[$i]
         $isLast   = ($i -eq $visible.Count - 1)
@@ -110,7 +186,8 @@ function Get-TreeLines {
             Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
             Write-Host $item.Name -ForegroundColor Cyan
             Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
-                          -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs
+                          -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
+                          -ignorePatterns $ignorePatterns
         } else {
             Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
             Write-Host $item.Name -ForegroundColor Gray
@@ -124,7 +201,8 @@ function Build-YamlLines {
         [int]$depth = 0,
         [int]$indentSize = 2,
         [bool]$onlyFiles = $false,
-        [bool]$onlyDirs  = $false
+        [bool]$onlyDirs  = $false,
+        [string[]]$ignorePatterns = @()
     )
 
     $lines  = [System.Collections.Generic.List[string]]::new()
@@ -140,11 +218,16 @@ function Build-YamlLines {
         $all
     }
 
+    if ($ignorePatterns.Count -gt 0) {
+        $visible = $visible | Where-Object { -not (Test-Ignored -item $_ -patterns $ignorePatterns) }
+    }
+
     foreach ($item in $visible) {
         if ($item.PSIsContainer) {
             $lines.Add("${indent}- $($item.Name):")
             $children = Build-YamlLines -path $item.FullName -depth ($depth + 1) `
-                                        -indentSize $indentSize -onlyFiles $onlyFiles -onlyDirs $onlyDirs
+                                        -indentSize $indentSize -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
+                                        -ignorePatterns $ignorePatterns
             foreach ($child in $children) {
                 $lines.Add($child)
             }
@@ -164,20 +247,36 @@ function Show-Tree {
     $filterLabel = if ($filesOnly) { "  --files-only" } elseif ($dirsOnly) { "  --dirs-only" } else { "" }
     $root = Get-Item (Get-Location).Path
 
+    $ignorePatterns = @()
+    $ignoreLabel    = ""
+    if ($clean) {
+        $ignorePatterns = Get-IgnorePatterns
+        $gitignorePath  = Join-Path (Get-Location).Path ".gitignore"
+        $ignoreLabel    = if (Test-Path $gitignorePath) { "  --clean (.gitignore)" } else { "  --clean (scaffx.ignore)" }
+    }
+
     $count = (Get-ChildItem -LiteralPath $root.FullName -Recurse -ErrorAction SilentlyContinue).Count
     if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
 
     $rootName = $root.Name
-    Write-Header "tree      ->  $rootName$filterLabel"
+    Write-Header "tree      ->  $rootName$filterLabel$ignoreLabel"
 
     Get-TreeLines -path $root.FullName -prefix "  " -depth 0 -maxDepth $maxDepth `
-                  -onlyFiles $filesOnly -onlyDirs $dirsOnly
+                  -onlyFiles $filesOnly -onlyDirs $dirsOnly -ignorePatterns $ignorePatterns
 
     Write-Host ""
 }
 
 function Write-Snapshot {
     $rootItem    = Get-Item (Get-Location).Path
+
+    $ignorePatterns = @()
+    $ignoreLabel    = ""
+    if ($clean) {
+        $ignorePatterns = Get-IgnorePatterns
+        $gitignorePath  = Join-Path (Get-Location).Path ".gitignore"
+        $ignoreLabel    = if (Test-Path $gitignorePath) { " --clean (.gitignore)" } else { " --clean (scaffx.ignore)" }
+    }
 
     $count = (Get-ChildItem -LiteralPath $rootItem.FullName -Recurse -ErrorAction SilentlyContinue).Count
     if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
@@ -186,13 +285,14 @@ function Write-Snapshot {
     $outFile     = Join-Path $rootItem.FullName "$rootName.yaml"
     $filterLabel = if ($filesOnly) { " --files-only" } elseif ($dirsOnly) { " --dirs-only" } else { "" }
 
-    Write-Header "snapshot  ->  $rootName.yaml$filterLabel"
+    Write-Header "snapshot  ->  $rootName.yaml$filterLabel$ignoreLabel"
 
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("root:")
 
     $children = Build-YamlLines -path $rootItem.FullName -depth 1 -indentSize 2 `
-                                -onlyFiles $filesOnly -onlyDirs $dirsOnly
+                                -onlyFiles $filesOnly -onlyDirs $dirsOnly `
+                                -ignorePatterns $ignorePatterns
 
     $outFileName = "$rootName.yaml"
     foreach ($line in $children) {

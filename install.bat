@@ -25,7 +25,7 @@ if exist "%~dp0windows\scaffx.bat" (
     set "SOURCE_DIR=%TEMP%\%TOOL_NAME%-install"
 )
 
-echo   install   %INSTALL_DIR%
+echo   install    %INSTALL_DIR%
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 
 xcopy /E /I /Y  "%SOURCE_DIR%\templates"          "%INSTALL_DIR%\templates\" > nul
@@ -39,14 +39,14 @@ set "TMPL=%INSTALL_DIR%\templates"
 set "COPY_OK=1"
 
 rem si llega a annadir la logica de plantillas descomentar esta parte
-rem if not exist "%TMPL%\files\"          ( echo   warn      ! templates\files\ no copiado    & set "COPY_OK=0" )
+if not exist "%TMPL%\files\"          ( echo   warn      ! templates\files\ no copiado    & set "COPY_OK=0" )
 rem if not exist "%TMPL%\architectures\"  ( echo   warn      ! templates\architectures\ no copiado & set "COPY_OK=0" )
-rem 
-rem if "%COPY_OK%"=="1" (
-rem     echo   templates ^ files\, architectures\
-rem ) else (
-rem     echo   templates x copia incompleta, verifica manualmente: %TMPL%
-rem )
+ 
+if "%COPY_OK%"=="1" (
+    echo   templates ^ files\ & rem, architectures\
+) else (
+    echo   templates x copia incompleta, verifica manualmente: %TMPL%
+)
 
 rem -- limpiar clone temporal --------------------------------------------------
 if exist "%TEMP%\%TOOL_NAME%-install" rmdir /s /q "%TEMP%\%TOOL_NAME%-install"
@@ -63,9 +63,9 @@ for /f "skip=2 tokens=3*" %%A in (
 echo %CURRENT_PATH% | findstr /i /c:"%INSTALL_DIR%" > nul
 if errorlevel 1 (
     setx PATH "%CURRENT_PATH%;%INSTALL_DIR%" > nul
-    echo   path      ^ added to user PATH
+    echo   path       ^ added to user PATH
 ) else (
-    echo   path      -  already present, skipping
+    echo   path       -  already present, skipping
 )
 
 echo.
