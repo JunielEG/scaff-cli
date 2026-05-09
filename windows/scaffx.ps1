@@ -4,6 +4,8 @@
     [string[]]$rest
 )
 
+$DIRSIZELIMIT = 200
+
 $FILETEMPLATES = Join-Path $PSScriptRoot "templates/files"
 $ARCHTEMPLATES = Join-Path $PSScriptRoot "templates/architectures"
 
@@ -256,7 +258,7 @@ function Show-Tree {
     }
 
     $count = (Get-ChildItem -LiteralPath $root.FullName -Recurse -ErrorAction SilentlyContinue).Count
-    if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
+    if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!")) { return }
 
     $rootName = $root.Name
     Write-Header "tree      ->  $rootName$filterLabel$ignoreLabel"
@@ -279,7 +281,7 @@ function Write-Snapshot {
     }
 
     $count = (Get-ChildItem -LiteralPath $rootItem.FullName -Recurse -ErrorAction SilentlyContinue).Count
-    if ($count -gt 200 -and -not (Confirm "el directorio tiene $count elementos!")) { return }
+    if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!")) { return }
 
     $rootName    = $rootItem.Name
     $outFile     = Join-Path $rootItem.FullName "$rootName.yaml"
