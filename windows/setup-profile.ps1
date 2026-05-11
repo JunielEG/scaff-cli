@@ -9,8 +9,8 @@ if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileD
 $block = @'
 
 # $toolCmd [start]
-function cppx { & "$InstallDir\cppx.ps1" @args }
-Register-ArgumentCompleter -CommandName cppx -ScriptBlock {
+function $toolCmd { & "$InstallDir\$toolCmd.ps1" @args }
+Register-ArgumentCompleter -CommandName $toolCmd -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $tokens = $commandAst.CommandElements
     $cmd1   = if ($tokens.Count -gt 1) { $tokens[1].Value } else { "" }

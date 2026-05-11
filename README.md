@@ -16,6 +16,7 @@
 > You only need the install script — cloning the repository is just the easiest way to get it.
 
 **1. Clone the repository:**
+
 ```bash
 git clone https://github.com/JunielEG/scaff-cli.git
 cd scaff-cli
@@ -24,6 +25,7 @@ cd scaff-cli
 **2. Run the install script for your platform:**
 
 **Windows** — run `install.bat` directly or add the folder to your PATH:
+
 ```bat
 install.bat
 ```
@@ -31,6 +33,7 @@ install.bat
 **Linux / macOS** — _coming soon_
 
 **3. Open a new terminal** and verify:
+
 ```bash
 scaffx
 ```
@@ -39,11 +42,11 @@ scaffx
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `scaffx tree` | Shows a visual tree of the current directory |
-| `scaffx tree <depth>` | Limits the tree depth (e.g. `scaffx tree 2`) |
-| `scaffx snapshot` | Generates `<root>.yaml` with the current folder structure |
+| Command               | Description                                               |
+| --------------------- | --------------------------------------------------------- |
+| `scaffx tree`         | Shows a visual tree of the current directory              |
+| `scaffx tree <depth>` | Limits the tree depth (e.g. `scaffx tree 2`)              |
+| `scaffx snapshot`     | Generates `<root>.yaml` with the current folder structure |
 
 ---
 
@@ -51,11 +54,11 @@ scaffx
 
 Flags can be combined with any command that supports them.
 
-| Flag | Description | Works with |
-|---|---|---|
-| `--files-only` | Include only files | `tree`, `snapshot` |
-| `--dirs-only` | Include only directories | `tree`, `snapshot` |
-| `--clean` | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot` |
+| Flag           | Description                                                                                | Works with         |
+| -------------- | ------------------------------------------------------------------------------------------ | ------------------ |
+| `--files-only` | Include only files                                                                         | `tree`, `snapshot` |
+| `--dirs-only`  | Include only directories                                                                   | `tree`, `snapshot` |
+| `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot` |
 
 > `--files-only` and `--dirs-only` cannot be used together.
 
@@ -102,10 +105,10 @@ scaffx snapshot --dirs-only
 ```yaml
 root:
   - src:
-    - main.cpp
-    - utils.cpp
+      - main.cpp
+      - utils.cpp
   - include:
-    - utils.h
+      - utils.h
   - CMakeLists.txt
 ```
 
@@ -149,7 +152,7 @@ scaffx snapshot --clean
 
 ## Installed file location
 
-| Platform | Path |
-|---|---|
-| Windows | `%USERPROFILE%\ScaffoldingTools\scaff-cli\` |
-| Linux / macOS | _coming soon_ |
+| Platform      | Path                                        |
+| ------------- | ------------------------------------------- |
+| Windows       | `%USERPROFILE%\ScaffoldingTools\scaff-cli\` |
+| Linux / macOS | _coming soon_                               |
