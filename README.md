@@ -42,11 +42,17 @@ scaffx
 
 ## Commands
 
-| Command               | Description                                               |
-| --------------------- | --------------------------------------------------------- |
-| `scaffx tree`         | Shows a visual tree of the current directory              |
-| `scaffx tree <depth>` | Limits the tree depth (e.g. `scaffx tree 2`)              |
-| `scaffx snapshot`     | Generates `<root>.yaml` with the current folder structure |
+| Command                 | Description                                                          |
+| ----------------------- | -------------------------------------------------------------------- |
+| `scaffx tree`           | Shows a visual tree of the current directory                         |
+| `scaffx tree <depth>`   | Limits the tree depth (e.g. `scaffx tree 2`)                         |
+| `scaffx snapshot`       | Generates `<root>.yaml` with the current folder structure            |
+| `scaffx count`          | Shows the number of items in the current directory                   |
+| `scaffx size`           | Shows the total disk size of the current directory                   |
+| `scaffx find <pattern>` | Searches the tree by name — use quotes for wildcards (e.g. `*.json`) |
+| `scaffx diff`           | Compares the current structure against an existing `.yaml` snapshot  |
+| `scaffx watch`          | Monitors the directory for changes in real time (Ctrl+C to stop)     |
+| `scaffx ignore`         | Shows which files/folders are currently being ignored                |
 
 ---
 
@@ -54,13 +60,14 @@ scaffx
 
 Flags can be combined with any command that supports them.
 
-| Flag           | Description                                                                                | Works with         |
-| -------------- | ------------------------------------------------------------------------------------------ | ------------------ |
-| `--files-only` | Include only files                                                                         | `tree`, `snapshot` |
-| `--dirs-only`  | Include only directories                                                                   | `tree`, `snapshot` |
-| `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot` |
+| Flag           | Description                                                                                | Works with                          |
+| -------------- | ------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `--files-only` | Include only files                                                                         | `tree`, `snapshot`, `count`, `find` |
+| `--dirs-only`  | Include only directories                                                                   | `tree`, `snapshot`, `find`          |
+| `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot`                  |
 
 > `--files-only` and `--dirs-only` cannot be used together.
+> Incompatible flag combinations will produce an error instead of silently misbehaving.
 
 ---
 
@@ -103,7 +110,7 @@ scaffx snapshot --dirs-only
 ```
 
 ```yaml
-root:
+my-project:
   - src:
       - main.cpp
       - utils.cpp
@@ -136,6 +143,75 @@ tree  ->  my-project  --clean (scaffx.ignore)
 ```
 
 [`scaffx.ignore`](./templates/files/scaffx.ignore) covers common noise across OS, editors, dependencies, build artifacts, and more — so it works out of the box on any project type.
+
+---
+
+### `scaffx count`
+
+Counts the total number of items in the current directory recursively.
+
+```bash
+scaffx count
+scaffx count --files-only
+```
+
+---
+
+### `scaffx size`
+
+Shows the total disk size of all files in the current directory recursively. Automatically formats the output as B, KB, MB, or GB.
+
+```bash
+scaffx size
+```
+
+If the directory exceeds 200 files, scaffx will ask for confirmation before proceeding.
+
+---
+
+### `scaffx find <pattern>`
+
+Searches the directory tree by name and displays results using the same visual format as `tree`.
+
+```bash
+scaffx find *.json
+scaffx find README*
+scaffx find CMakeLists.txt --files-only
+```
+
+---
+
+### `scaffx diff`
+
+Compares the current directory structure against an existing `<root>.yaml` snapshot. Shows added (`+`) and removed (`-`) entries since the snapshot was taken.
+
+```bash
+scaffx diff
+```
+
+Requires a snapshot to exist in the current directory — run `scaffx snapshot` first.
+
+---
+
+### `scaffx watch`
+
+Monitors the current directory for file system changes in real time. Prints a timestamped line for every creation, deletion, or rename. Press `Ctrl+C` to stop.
+
+```bash
+scaffx watch
+```
+
+---
+
+### `scaffx ignore`
+
+Shows which files and folders in the current directory are being filtered by the active ignore file (`.gitignore` or `scaffx.ignore`). Useful for verifying ignore patterns before running `tree` or `snapshot --clean`.
+
+```bash
+scaffx ignore
+```
+
+If patterns are defined but nothing matches, the active pattern list is shown to help debug incorrect entries.
 
 ---
 

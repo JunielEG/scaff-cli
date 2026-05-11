@@ -1,7 +1,7 @@
 param($InstallDir)
 
 $profileFile = $PROFILE
-$profileDir  = Split-Path $profileFile
+$profileDir = Split-Path $profileFile
 $toolCmd = "scaffx"
 
 if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir | Out-Null }
@@ -16,7 +16,7 @@ Register-ArgumentCompleter -CommandName $toolCmd -ScriptBlock {
     $cmd1   = if ($tokens.Count -gt 1) { $tokens[1].Value } else { "" }
 
     $commands = @{
-        ""    = @("tree", "snapshot")
+        ""    = @("tree", "snapshot", "count", "size", "find", "diff", "watch", "ignore")
     }
 
     $completing = if ($tokens.Count -eq 1) { "" }
@@ -34,17 +34,17 @@ Register-ArgumentCompleter -CommandName $toolCmd -ScriptBlock {
 '@
 
 $block = $block.Replace('$InstallDir', $InstallDir)
-$block = $block.Replace('$toolCmd',    $toolCmd)
+$block = $block.Replace('$toolCmd', $toolCmd)
 
 if (Test-Path $profileFile) {
     $content = Get-Content $profileFile -Raw
 
-if ($content -match "(?s)# $toolCmd \[start\].*?# $toolCmd \[end\]") {
-    $pattern = "(?s)# $toolCmd \[start\].*?# $toolCmd \[end\]"
-    $replacement = $block.Trim()
-    $content = [regex]::Replace($content, $pattern, { $replacement })
-    Set-Content -Path $profileFile -Value $content
-    Write-Host "  profile    ^  autocomplete updated"
+    if ($content -match "(?s)# $toolCmd \[start\].*?# $toolCmd \[end\]") {
+        $pattern = "(?s)# $toolCmd \[start\].*?# $toolCmd \[end\]"
+        $replacement = $block.Trim()
+        $content = [regex]::Replace($content, $pattern, { $replacement })
+        Set-Content -Path $profileFile -Value $content
+        Write-Host "  profile    ^  autocomplete updated"
     } else {
         # No existe, agregar al final
         Add-Content -Path $profileFile -Value $block
