@@ -18,6 +18,7 @@ $cmd2 = if ($positional.Count -gt 0) { $positional[0] } else { "" }
 $filesOnly = $flags -contains "--files-only"
 $dirsOnly = $flags -contains "--dirs-only"
 $clean = $flags -contains "--clean"
+$pathMode = $flags -contains "--path"
 
 if ($filesOnly -and $dirsOnly) {
     Write-Host ""
@@ -29,6 +30,14 @@ if ($filesOnly -and $dirsOnly) {
 # Flags incompatibles por comando
 $fileOnlyCommands = @("count", "size")         # --dirs-only no aplica
 $cleanOnlyCommands = @("ignore", "watch", "find", "count", "size", "diff") # --clean no aplica
+$pathOnlyCommands = @("watch", "diff", "snapshot", "count", "size")
+
+if (($filesOnly -or $dirsOnly) -and $cmd1 -in @("watch", "diff", "ignore")) {
+    Write-Host ""
+    Write-Host "  error  --files-only / --dirs-only no son compatibles con '$cmd1'" -ForegroundColor Red
+    Write-Host ""
+    exit 1
+}
 
 if ($dirsOnly -and $cmd1 -in $fileOnlyCommands) {
     Write-Host ""
@@ -44,11 +53,11 @@ if ($clean -and $cmd1 -in $cleanOnlyCommands) {
     exit 1
 }
 
-if (($filesOnly -or $dirsOnly) -and $cmd1 -in @("watch", "diff", "ignore")) {
+if ($pathMode -and $cmd1 -in $pathOnlyCommands) {
     Write-Host ""
-    Write-Host "  error  --files-only / --dirs-only no son compatibles con '$cmd1'" -ForegroundColor Red
+    Write-Host "  error  --path no es compatible con '$cmd1'" -ForegroundColor Red
     Write-Host ""
-    exit 1F
+    exit 1
 }
 
 # -- Command table ------------------------------------------------------------
@@ -59,13 +68,14 @@ $COMMANDS = @(
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx snapshot"; Desc = "genera <raiz>.yaml con la estructura actual del folder" },
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx count"; Desc = "muestra la cantidad de archivos en el directorio actual" },
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx size"; Desc = "muestra el peso total del directorio actual" },
-    [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx find <patron>";  Desc = "busca en el arbol por nombre — usa comillas para wildcards (ej: '*.json')" },
+    [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx find <patron>"; Desc = "busca en el arbol por nombre — usa comillas para wildcards (ej: '*.json')" },
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx diff"; Desc = "compara la estructura actual contra el snapshot .yaml existente" },
     [PSCustomObject]@{ Group = "inspect"; Cmd = "scaffx watch"; Desc = "monitorea cambios en el directorio en tiempo real (Ctrl+C para salir)" },
     [PSCustomObject]@{ Group = "ignore"; Cmd = "scaffx ignore"; Desc = "muestra que archivos/carpetas estan siendo ignorados actualmente" },
     [PSCustomObject]@{ Group = "flags"; Cmd = "  --files-only"; Desc = "incluye solo archivos (tree / snapshot / count / find)" },
     [PSCustomObject]@{ Group = "flags"; Cmd = "  --dirs-only"; Desc = "incluye solo directorios (tree / snapshot / find)" },
-    [PSCustomObject]@{ Group = "flags"; Cmd = "  --clean"; Desc = "omite entradas segun .gitignore o scaffx.ignore (tree / snapshot)" }
+    [PSCustomObject]@{ Group = "flags"; Cmd = "  --clean"; Desc = "omite entradas segun .gitignore o scaffx.ignore (tree / snapshot)" },
+    [PSCustomObject]@{ Group = "flags"; Cmd = "  --path"; Desc = "muestra paths en lugar de arbol visual (tree / find / ignore)" }
 )
 
 # -- UI helpers ---------------------------------------------------------------
@@ -78,7 +88,7 @@ function Write-Header([string]$title) {
 }
 
 function Write-Row([string]$label, [string]$msg, [string]$status = "ok") {
-    $icon = switch ($status) { "ok" { "+" } "warn" { "warn" } "skip" { "-" } "none" { "." } default { " " } }
+    $icon = switch ($status) { "ok" { "+" } "warn" { "warn" } "skip" { "-" } "none" { " " } default { " " } }
     $color = switch ($status) { "ok" { "Green" } "warn" { "Yellow" } default { "DarkGray" } }
     Write-Host ("  {0,-10}" -f $label) -ForegroundColor DarkGray -NoNewline
     Write-Host "$icon  " -ForegroundColor $color -NoNewline
@@ -108,25 +118,48 @@ function Show-Help {
 
 # -- Helpers ------------------------------------------------------------------
 
+function Get-Root { return Get-Item (Get-Location).Path }
+
 function Confirm([string]$msg, [string]$qst) {
     Write-Host ""
     Write-Row "" $msg "warn"
     $reply = Read-Host "  " $qst " [Y/n]"
     Write-Host ""
     return ($reply -match '^[Yy]')
-}
+}    
 
 function Get-Template([string]$file, [hashtable]$replacements) {
     $path = Join-Path $FILETEMPLATES $file
     if (-not (Test-Path $path)) {
         Write-Fail "template no encontrado: $file"
         return ""
-    }
+    }    
     $content = Get-Content $path -Raw
     foreach ($key in $replacements.Keys) {
         $content = $content -replace "{{${key}}}", $replacements[$key]
-    }
+    }    
     return $content
+}    
+
+function Get-FilterLabel {
+    if ($filesOnly) { return "  --files-only" }
+    if ($dirsOnly)  { return "  --dirs-only" }
+    return ""
+}
+
+function Get-IgnoreContext {
+    if (-not $clean) { return @{ patterns = @(); label = "" } }
+    $patterns = Get-IgnorePatterns
+    $gitignorePath = Join-Path (Get-Location).Path ".gitignore"
+    $label = if (Test-Path $gitignorePath) { "  --clean (.gitignore)" } else { "  --clean (scaffx.ignore)" }
+    return @{ patterns = $patterns; label = $label }
+}
+
+function Get-VisibleItems([string]$path, [bool]$onlyFiles, [bool]$onlyDirs) {
+    $all = Get-ChildItem -LiteralPath $path | Sort-Object { $_.PSIsContainer -eq $false }, Name
+    if ($onlyFiles) { return $all | Where-Object { -not $_.PSIsContainer } }
+    if ($onlyDirs)  { return $all | Where-Object { $_.PSIsContainer } }
+    return $all
 }
 
 function Get-IgnorePatterns {
@@ -180,10 +213,9 @@ function Test-Ignored {
 }
 
 function Get-DirItemCount([string]$path, [bool]$filesOnly = $false) {
-    if ($filesOnly) {
-        return (Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue).Count
-    }
-    return (Get-ChildItem -LiteralPath $path -Recurse -ErrorAction SilentlyContinue).Count
+    $params = @{ LiteralPath = $path; Recurse = $true; ErrorAction = "SilentlyContinue" }
+    if ($filesOnly) { $params["File"] = $true }
+    return (Get-ChildItem @params).Count
 }
 
 function Get-TreeLines {
@@ -194,31 +226,40 @@ function Get-TreeLines {
         [int]$maxDepth = -1,
         [bool]$onlyFiles = $false,
         [bool]$onlyDirs = $false,
+        [bool]$pathMode = $false,
         [string[]]$ignorePatterns = @(),
-        [string]$filterPattern = ""
+        [string[]]$filterPatterns = @(),
+        [string[]]$ignoreHighlight = @()
     )
 
     if ($maxDepth -ge 0 -and $depth -ge $maxDepth) { return }
 
-    $all = Get-ChildItem -LiteralPath $path | Sort-Object { $_.PSIsContainer -eq $false }, Name
-
-    $visible = if ($onlyFiles) { $all | Where-Object { -not $_.PSIsContainer } }
-    elseif ($onlyDirs) { $all | Where-Object { $_.PSIsContainer } }
-    else { $all }
-
+    $visible = Get-VisibleItems -path $path -onlyFiles $onlyFiles -onlyDirs $onlyDirs
     if ($ignorePatterns.Count -gt 0) {
         $visible = $visible | Where-Object { -not (Test-Ignored -item $_ -patterns $ignorePatterns) }
     }
-
-    if ($filterPattern) {
+    
+    if ($filterPatterns.Count -gt 0) {
         $visible = $visible | Where-Object {
             $item = $_
             if ($item.PSIsContainer) {
                 (Get-ChildItem -LiteralPath $item.FullName -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -like $filterPattern }).Count -gt 0
+                Where-Object { $n = $_.Name; $filterPatterns | Where-Object { $n -like $_ } }).Count -gt 0
             } else {
-                $item.Name -like $filterPattern
+                $filterPatterns | Where-Object { $item.Name -like $_ }
             }
+        }
+    }
+
+    if ($ignoreHighlight.Count -gt 0) {
+        $visible = $visible | Where-Object {
+            $item = $_
+            $isIgnored = Test-Ignored -item $item -patterns $ignoreHighlight
+            if ($isIgnored) { return $true }
+            if ($item.PSIsContainer) {
+                (Get-ChildItem -LiteralPath $item.FullName -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { Test-Ignored -item $_ -patterns $ignoreHighlight }).Count -gt 0
+            } else { $false }
         }
     }
 
@@ -228,16 +269,39 @@ function Get-TreeLines {
         $branch = if ($isLast) { "└── " } else { "├── " }
         $childPfx = if ($isLast) { "    " } else { "│   " }
 
+        $isIgnoredItem = $ignoreHighlight.Count -gt 0 -and (Test-Ignored -item $item -patterns $ignoreHighlight)
+
         if ($item.PSIsContainer) {
-            Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
-            Write-Host $item.Name -ForegroundColor Cyan
-            Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
-                -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
-                -ignorePatterns $ignorePatterns -filterPattern $filterPattern
+            $dirColor = if ($isIgnoredItem) { "Yellow" } else { "Cyan" }
+            if ($pathMode) {
+                Write-Host "  $($item.FullName)" -ForegroundColor $dirColor
+                if (-not $isIgnoredItem) {
+                    Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
+                        -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
+                        -ignorePatterns $ignorePatterns -filterPatterns $filterPatterns `
+                        -ignoreHighlight $ignoreHighlight -pathMode $pathMode
+                }
+            } else {
+                Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
+                $itemName=$item.Name
+                Write-Host "$itemName/" -ForegroundColor $dirColor
+                if (-not $isIgnoredItem) {
+                    Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
+                        -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
+                        -ignorePatterns $ignorePatterns -filterPatterns $filterPatterns `
+                        -ignoreHighlight $ignoreHighlight -pathMode $pathMode
+                }
+            }
         } else {
-            $nameColor = if ($filterPattern -and $item.Name -like $filterPattern) { "Yellow" } else { "Gray" }
-            Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
-            Write-Host $item.Name -ForegroundColor $nameColor
+            $matchParam = $filterPatterns.Count -eq 0 -or ($filterPatterns | Where-Object { $item.Name -like $_ })
+            if (-not $matchParam) { continue }
+            $nameColor = if ($isIgnoredItem) { "Yellow" } elseif ($filterPatterns.Count -gt 0) { "Yellow" } else { "Gray" }
+            if ($pathMode) {
+                Write-Host "  $($item.FullName)" -ForegroundColor $nameColor
+            } else {
+                Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
+                Write-Host $item.Name -ForegroundColor $nameColor
+            }
         }
     }
 }
@@ -255,12 +319,7 @@ function Build-YamlLines {
     $lines = [System.Collections.Generic.List[string]]::new()
     $indent = " " * ($depth * $indentSize)
 
-    $all = Get-ChildItem -LiteralPath $path | Sort-Object { $_.PSIsContainer -eq $false }, Name
-
-    $visible = if ($onlyFiles) { $all | Where-Object { -not $_.PSIsContainer } }
-    elseif ($onlyDirs) { $all | Where-Object { $_.PSIsContainer } }
-    else { $all }
-
+    $visible = Get-VisibleItems -path $path -onlyFiles $onlyFiles -onlyDirs $onlyDirs
     if ($ignorePatterns.Count -gt 0) {
         $visible = $visible | Where-Object { -not (Test-Ignored -item $_ -patterns $ignorePatterns) }
     }
@@ -315,55 +374,38 @@ function Get-YamlPaths([string]$yamlFile) {
 function Show-Tree {
     param([int]$maxDepth = -1)
 
-    $filterLabel = if ($filesOnly) { "  --files-only" } elseif ($dirsOnly) { "  --dirs-only" } else { "" }
-    $root = Get-Item (Get-Location).Path
-
-    $ignorePatterns = @()
-    $ignoreLabel = ""
-    if ($clean) {
-        $ignorePatterns = Get-IgnorePatterns
-        $gitignorePath = Join-Path (Get-Location).Path ".gitignore"
-        $ignoreLabel = if (Test-Path $gitignorePath) { "  --clean (.gitignore)" } else { "  --clean (scaffx.ignore)" }
-    }
-
+    $root = Get-Root
+    $filterLabel = Get-FilterLabel
+    $ignoreCtx = Get-IgnoreContext
     $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly
+    
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
     $rootName = $root.Name
-    Write-Header "tree      ->  $rootName$filterLabel$ignoreLabel"
-
+    Write-Header "tree      ->  $rootName$filterLabel$($ignoreCtx.label)"
     Get-TreeLines -path $root.FullName -prefix "  " -depth 0 -maxDepth $maxDepth `
-        -onlyFiles $filesOnly -onlyDirs $dirsOnly -ignorePatterns $ignorePatterns
-
-    Write-Host ""
+        -onlyFiles $filesOnly -onlyDirs $dirsOnly -ignorePatterns $ignoreCtx.patterns -pathMode $pathMode
 }
 
-function Write-Snapshot {
-    $rootItem = Get-Item (Get-Location).Path
-
-    $ignorePatterns = @()
-    $ignoreLabel = ""
-    if ($clean) {
-        $ignorePatterns = Get-IgnorePatterns
-        $gitignorePath = Join-Path (Get-Location).Path ".gitignore"
-        $ignoreLabel = if (Test-Path $gitignorePath) { " --clean (.gitignore)" } else { " --clean (scaffx.ignore)" }
-    }
-
+function Write-Snapshot { 
+    $rootItem = Get-Root
+    
+    $ignoreCtx = Get-IgnoreContext
     $count = Get-DirItemCount -path $rootItem.FullName -filesOnly $filesOnly
-    if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
-
     $rootName = $rootItem.Name
     $outFile = Join-Path $rootItem.FullName "$rootName.yaml"
-    $filterLabel = if ($filesOnly) { " --files-only" } elseif ($dirsOnly) { " --dirs-only" } else { "" }
+    $filterLabel = Get-FilterLabel
 
-    Write-Header "snapshot  ->  $rootName.yaml$filterLabel$ignoreLabel"
+    if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
+    Write-Header "snapshot  ->  $rootName.yaml$filterLabel$($ignoreCtx.label)"
+    
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("${rootName}:")
 
     $children = Build-YamlLines -path $rootItem.FullName -depth 1 -indentSize 2 `
         -onlyFiles $filesOnly -onlyDirs $dirsOnly `
-        -ignorePatterns $ignorePatterns
+        -ignorePatterns $ignoreCtx.patterns
 
     $outFileName = "$rootName.yaml"
     foreach ($line in $children) {
@@ -378,8 +420,8 @@ function Write-Snapshot {
 }
 
 function Show-Count {
-    $root = Get-Item (Get-Location).Path
-    $filterLabel = if ($filesOnly) { "  --files-only" } else { "" }
+    $root = Get-Root
+    $filterLabel = Get-FilterLabel
     $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly
 
     Write-Header "count     ->  $($root.Name)$filterLabel"
@@ -388,7 +430,7 @@ function Show-Count {
 }
 
 function Show-Size {
-    $root = Get-Item (Get-Location).Path
+    $root = Get-Root
     $count = Get-DirItemCount -path $root.FullName -filesOnly $true
 
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count archivos, puede tardar" "Desea continuar?")) { return }
@@ -406,24 +448,26 @@ function Show-Size {
     Write-Host ""
 }
 
-function Show-Find {
-    param([string]$pattern)
 
-    if (-not $pattern) {
-        Write-Fail "uso: scaffx find <patron>  (ej: scaffx find '*.json')"
+function Show-Find {
+    $patterns = $positional
+
+    if (-not $patterns -or $patterns.Count -eq 0) {
+        Write-Fail "uso: scaffx find <patron...>  (ej: scaffx find '*.json' '*.exe')"
         return
     }
 
-    $root = Get-Item (Get-Location).Path
-    $filterLabel = if ($filesOnly) { "  --files-only" } elseif ($dirsOnly) { "  --dirs-only" } else { "" }
+    $root = Get-Root
+    $filterLabel = Get-FilterLabel
+    $patternLabel = ($patterns | ForEach-Object { "'$_'" }) -join "  "
 
     $pairs = Get-ChildItem -LiteralPath $root.FullName -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like $pattern }
+    Where-Object { $n = $_.Name; $patterns | Where-Object { $n -like $_ } }
     $pairs = if ($filesOnly) { $pairs | Where-Object { -not $_.PSIsContainer } }
     elseif ($dirsOnly) { $pairs | Where-Object { $_.PSIsContainer } }
     else { $pairs }
 
-    Write-Header "find      ->  $($root.Name)  '$pattern'$filterLabel"
+    Write-Header "find      ->  $($root.Name)  $patternLabel$filterLabel"
 
     if (@($pairs).Count -eq 0) {
         Write-Row "result" "sin coincidencias" "none"
@@ -432,15 +476,16 @@ function Show-Find {
     }
 
     Get-TreeLines -path $root.FullName -prefix "  " -depth 0 `
-        -onlyFiles $filesOnly -onlyDirs $dirsOnly -filterPattern $pattern
+        -onlyFiles $filesOnly -onlyDirs $dirsOnly -filterPatterns $patterns -pathMode $pathMode
 
     Write-Host ""
     Write-Row "total" "$(@($pairs).Count) coincidencias" "ok"
     Write-Host ""
 }
 
+
 function Show-Diff {
-    $rootItem = Get-Item (Get-Location).Path
+    $rootItem = Get-Root
     $rootName = $rootItem.Name
     $yamlFile = Join-Path $rootItem.FullName "$rootName.yaml"
 
@@ -473,8 +518,8 @@ function Show-Diff {
         return
     }
 
-    foreach ($a in $added) { Write-Row "+" $a "ok" }
-    foreach ($r in $removed) { Write-Row "-" $r "warn" }
+    foreach ($a in $added) { Write-Row "" $a "ok" }
+    foreach ($r in $removed) { Write-Row "" $r "skip" }
 
     Write-Host ""
     $addedCount = if ($added) { @($added).Count }   else { 0 }
@@ -536,10 +581,10 @@ function Start-Watch {
 }
 
 function Show-Ignored {
-    $root = Get-Item (Get-Location).Path
+    $root = Get-Root
     $patterns = Get-IgnorePatterns
 
-    $gitignorePath = Join-Path (Get-Location).Path ".gitignore"
+    $gitignorePath = Join-Path $root.FullName ".gitignore"
     $source = if (Test-Path $gitignorePath) { ".gitignore" } else { "scaffx.ignore" }
 
     Write-Header "ignore    ->  $($root.Name)  ($source)"
@@ -550,8 +595,21 @@ function Show-Ignored {
         return
     }
 
-    $ignored = Get-ChildItem -LiteralPath $root.FullName -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { Test-Ignored -item $_ -patterns $patterns }
+    $ignored = [System.Collections.Generic.List[object]]::new()
+    $queue   = [System.Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue($root.FullName)
+
+    while ($queue.Count -gt 0) {
+        $current = $queue.Dequeue()
+        foreach ($item in (Get-ChildItem -LiteralPath $current -ErrorAction SilentlyContinue)) {
+            if (Test-Ignored -item $item -patterns $patterns) {
+                $ignored.Add($item)
+            } elseif ($item.PSIsContainer) {
+                $queue.Enqueue($item.FullName)
+            }
+        }
+    }
+
 
     if (-not $ignored -or @($ignored).Count -eq 0) {
         Write-Row "info" "patrones definidos pero ninguna entrada coincide" "none"
@@ -565,19 +623,11 @@ function Show-Ignored {
         return
     }
 
-    foreach ($item in $ignored) {
-        $rel = $item.FullName.Substring($root.FullName.Length).TrimStart('\', '/')
-        if ($item.PSIsContainer) {
-            Write-Host "  " -NoNewline
-            Write-Host $rel -ForegroundColor Cyan
-        } else {
-            Write-Host "  " -NoNewline
-            Write-Host $rel -ForegroundColor DarkGray
-        }
-    }
+    Get-TreeLines -path $root.FullName -prefix "  " -depth 0 `
+    -onlyFiles $false -onlyDirs $false -ignoreHighlight $patterns -pathMode $pathMode
 
     Write-Host ""
-    Write-Row "total" "$(@($ignored).Count) entradas ignoradas" "warn"
+    Write-Row "total" "$(@($ignored).Count) entradas ignoradas" "skip"
     Write-Host ""
 }
 
@@ -591,7 +641,7 @@ switch ($cmd1) {
     "snapshot" { Write-Snapshot }
     "count" { Show-Count }
     "size" { Show-Size }
-    "find" { Show-Find -pattern ($positional | Select-Object -Index 0) }
+    "find" { Show-Find }
     "diff" { Show-Diff }
     "watch" { Start-Watch }
     "ignore" { Show-Ignored }
