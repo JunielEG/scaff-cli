@@ -65,6 +65,7 @@ Flags can be combined with any command that supports them.
 | `--files-only` | Include only files                                                                         | `tree`, `snapshot`, `count`, `find` |
 | `--dirs-only`  | Include only directories                                                                   | `tree`, `snapshot`, `find`          |
 | `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot`                  |
+| `--path`       | Show full paths instead of visual tree                                                     | `tree`, `find`, `ignore`            |
 
 > `--files-only` and `--dirs-only` cannot be used together.
 > Incompatible flag combinations will produce an error instead of silently misbehaving.
@@ -82,6 +83,7 @@ scaffx tree
 scaffx tree 2
 scaffx tree --clean
 scaffx tree 2 --files-only
+scaffx tree --path
 ```
 
 ```
@@ -138,8 +140,8 @@ scaffx snapshot --clean       # same resolution logic
 The header shows which source is active:
 
 ```
-tree  ->  my-project  --clean (.gitignore)
-tree  ->  my-project  --clean (scaffx.ignore)
+  my-project               ->  tree  --clean (.gitignore)
+  my-project               ->  tree  --clean (scaffx.ignore)
 ```
 
 [`scaffx.ignore`](./templates/files/scaffx.ignore) covers common noise across OS, editors, dependencies, build artifacts, and more — so it works out of the box on any project type.
@@ -177,6 +179,7 @@ Searches the directory tree by name and displays results using the same visual f
 scaffx find *.json
 scaffx find README*
 scaffx find CMakeLists.txt --files-only
+scaffx find *.json --path
 ```
 
 ---
@@ -212,6 +215,20 @@ scaffx ignore
 ```
 
 If patterns are defined but nothing matches, the active pattern list is shown to help debug incorrect entries.
+
+---
+
+### `--path`
+
+Instead of rendering a visual tree, prints the full path of each matching file or directory — one per line.
+
+```bash
+scaffx tree --path
+scaffx find *.json README* --path
+scaffx ignore --path
+```
+
+Compatible with `--files-only`, `--dirs-only`, and `--clean` where those flags apply.
 
 ---
 

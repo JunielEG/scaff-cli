@@ -86,7 +86,7 @@ function Write-Header([string]$rootName, [string]$command, [string]$flags = "", 
     $minArrowCol = 30
     $prefix = "$indent$rootName"
     $padding = [Math]::Max($minArrowCol - $prefix.Length, 1)
-    $right = @($command, $flags, $extra) | Where-Object { $_ } | Join-String -Separator "  "
+    $right = ($(@($command, $flags, $extra) | Where-Object { $_ }) -join "  ")
     $line = "$prefix$(' ' * $padding)$arrow  $right"
     Write-Host ""
     Write-Host $line -ForegroundColor Cyan
@@ -290,7 +290,8 @@ function Get-TreeLines {
                 }
             } else {
                 Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
-                Write-Host "$($item.Name)/" -ForegroundColor $dirColor
+                $itemName = $item.Name
+                Write-Host "$itemName/" -ForegroundColor $dirColor
                 if (-not $isIgnoredItem) {
                     Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
                         -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
