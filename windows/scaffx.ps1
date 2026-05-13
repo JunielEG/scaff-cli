@@ -80,10 +80,17 @@ $COMMANDS = @(
 
 # -- UI helpers ---------------------------------------------------------------
 
-function Write-Header([string]$title) {
+function Write-Header([string]$rootName, [string]$command, [string]$flags = "", [string]$extra = "") {
+    $indent = "  "
+    $arrow = " ->"
+    $minArrowCol = 30
+    $prefix = "$indent$rootName"
+    $padding = [Math]::Max($minArrowCol - $prefix.Length, 1)
+    $right = @($command, $flags, $extra) | Where-Object { $_ } | Join-String -Separator "  "
+    $line = "$prefix$(' ' * $padding)$arrow  $right"
     Write-Host ""
-    Write-Host "  $title" -ForegroundColor Cyan
-    Write-Host "  $('-' * 40)" -ForegroundColor DarkGray
+    Write-Host $line -ForegroundColor Cyan
+    Write-Host "  $('-' * ($line.Length - $indent.Length))" -ForegroundColor Cyan
     Write-Host ""
 }
 
@@ -104,7 +111,7 @@ function Write-Fail([string]$msg) {
 # -- Guides ------------------------------------------------------------------
 
 function Show-Help {
-    Write-Header "scaffx"
+    Write-Header "scaffx" "help"
     $groups = $COMMANDS | Select-Object -ExpandProperty Group -Unique
     foreach ($g in $groups) {
         Write-Host "  $g" -ForegroundColor DarkGray
@@ -274,7 +281,7 @@ function Get-TreeLines {
         if ($item.PSIsContainer) {
             $dirColor = if ($isIgnoredItem) { "Yellow" } else { "Cyan" }
             if ($pathMode) {
-                Write-Host "  $($item.FullName)" -ForegroundColor $dirColor
+                Write-Host "  $($item.FullName)\" -ForegroundColor $dirColor
                 if (-not $isIgnoredItem) {
                     Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
                         -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
@@ -283,8 +290,7 @@ function Get-TreeLines {
                 }
             } else {
                 Write-Host "$prefix$branch" -ForegroundColor DarkGray -NoNewline
-                $itemName=$item.Name
-                Write-Host "$itemName/" -ForegroundColor $dirColor
+                Write-Host "$($item.Name)/" -ForegroundColor $dirColor
                 if (-not $isIgnoredItem) {
                     Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
                         -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
@@ -295,7 +301,7 @@ function Get-TreeLines {
         } else {
             $matchParam = $filterPatterns.Count -eq 0 -or ($filterPatterns | Where-Object { $item.Name -like $_ })
             if (-not $matchParam) { continue }
-            $nameColor = if ($isIgnoredItem) { "Yellow" } elseif ($filterPatterns.Count -gt 0) { "Yellow" } else { "Gray" }
+            $nameColor = if ($isIgnoredItem) { "Yellow" } elseif ($filterPatterns.Count -gt 0) { "Green" } else { "Gray" }
             if ($pathMode) {
                 Write-Host "  $($item.FullName)" -ForegroundColor $nameColor
             } else {
@@ -381,8 +387,7 @@ function Show-Tree {
     
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
-    $rootName = $root.Name
-    Write-Header "tree      ->  $rootName$filterLabel$($ignoreCtx.label)"
+    Write-Header $root.Name "tree" "$filterLabel$($ignoreCtx.label)".Trim()
     Get-TreeLines -path $root.FullName -prefix "  " -depth 0 -maxDepth $maxDepth `
         -onlyFiles $filesOnly -onlyDirs $dirsOnly -ignorePatterns $ignoreCtx.patterns -pathMode $pathMode
 }
@@ -398,7 +403,7 @@ function Write-Snapshot {
 
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
-    Write-Header "snapshot  ->  $rootName.yaml$filterLabel$($ignoreCtx.label)"
+    Write-Header $rootItem.Name "snapshot" "$filterLabel$($ignoreCtx.label)".Trim()
     
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("${rootName}:")
@@ -424,7 +429,7 @@ function Show-Count {
     $filterLabel = Get-FilterLabel
     $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly
 
-    Write-Header "count     ->  $($root.Name)$filterLabel"
+    Write-Header $root.Name "count" $filterLabel.Trim()
     Write-Row "archivos" "$count elementos" "ok"
     Write-Host ""
 }
@@ -443,7 +448,7 @@ function Show-Size {
     elseif ($bytes -ge 1KB) { "{0:N2} KB" -f ($bytes / 1KB) }
     else { "$bytes B" }
 
-    Write-Header "size      ->  $($root.Name)"
+    Write-Header $root.Name "size"
     Write-Row "peso" $sizeStr "ok"
     Write-Host ""
 }
@@ -467,7 +472,7 @@ function Show-Find {
     elseif ($dirsOnly) { $pairs | Where-Object { $_.PSIsContainer } }
     else { $pairs }
 
-    Write-Header "find      ->  $($root.Name)  $patternLabel$filterLabel"
+    Write-Header $root.Name "find" $filterLabel.Trim() $patternLabel
 
     if (@($pairs).Count -eq 0) {
         Write-Row "result" "sin coincidencias" "none"
@@ -497,7 +502,7 @@ function Show-Diff {
     $count = Get-DirItemCount -path $rootItem.FullName -filesOnly $false
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
-    Write-Header "diff      ->  $rootName  vs  $rootName.yaml"
+    Write-Header $rootItem.Name "diff" "" "$rootName.yaml"
 
     $current = [System.Collections.Generic.HashSet[string]]::new()
     Get-ChildItem -LiteralPath $rootItem.FullName -Recurse -ErrorAction SilentlyContinue |
@@ -531,7 +536,7 @@ function Show-Diff {
 function Start-Watch {
     $root = Get-Item (Get-Location).Path
 
-    Write-Header "watch     ->  $($root.Name)"
+    Write-Header $root.Name "watch"
     Write-Row "estado" "monitoreando... (Ctrl+C para salir)" "warn"
     Write-Host ""
 
@@ -587,7 +592,7 @@ function Show-Ignored {
     $gitignorePath = Join-Path $root.FullName ".gitignore"
     $source = if (Test-Path $gitignorePath) { ".gitignore" } else { "scaffx.ignore" }
 
-    Write-Header "ignore    ->  $($root.Name)  ($source)"
+    Write-Header $root.Name "ignore" "" $source
 
     if (-not $patterns -or $patterns.Count -eq 0) {
         Write-Row "info" "no se encontro archivo de ignore" "none"
