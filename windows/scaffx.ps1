@@ -281,8 +281,10 @@ function Get-TreeLines {
         if ($item.PSIsContainer) {
             $dirColor = if ($isIgnoredItem) { "Yellow" } else { "Cyan" }
             if ($pathMode) {
-                Write-Host "  $($item.FullName)\" -ForegroundColor $dirColor
-                if (-not $isIgnoredItem) {
+                if ($isIgnoredItem) {
+                    Write-Host "  $($item.FullName)\" -ForegroundColor $dirColor
+                }
+                else {
                     Get-TreeLines -path $item.FullName -prefix "$prefix$childPfx" -depth ($depth + 1) `
                         -maxDepth $maxDepth -onlyFiles $onlyFiles -onlyDirs $onlyDirs `
                         -ignorePatterns $ignorePatterns -filterPatterns $filterPatterns `
@@ -302,7 +304,7 @@ function Get-TreeLines {
         } else {
             $matchParam = $filterPatterns.Count -eq 0 -or ($filterPatterns | Where-Object { $item.Name -like $_ })
             if (-not $matchParam) { continue }
-            $nameColor = if ($isIgnoredItem) { "Yellow" } elseif ($filterPatterns.Count -gt 0) { "Green" } else { "Gray" }
+            $nameColor = if ($isIgnoredItem) { "Yellow" } else { "Gray" }
             if ($pathMode) {
                 Write-Host "  $($item.FullName)" -ForegroundColor $nameColor
             } else {
