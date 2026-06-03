@@ -64,7 +64,7 @@ Flags can be combined with any command that supports them.
 | -------------- | ------------------------------------------------------------------------------------------ | ----------------------------------- |
 | `--files-only` | Include only files                                                                         | `tree`, `snapshot`, `count`, `find` |
 | `--dirs-only`  | Include only directories                                                                   | `tree`, `snapshot`, `find`          |
-| `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot`                  |
+| `--clean`      | Skip entries matched by `.gitignore` or [`scaffx.ignore`](./templates/files/scaffx.ignore) | `tree`, `snapshot`, `size`, `count` |
 | `--path`       | Show full paths instead of visual tree                                                     | `tree`, `find`, `ignore`            |
 
 > `--files-only` and `--dirs-only` cannot be used together.
@@ -125,29 +125,6 @@ The output file is named after the root folder (e.g. `my-project.yaml`) and is a
 
 ---
 
-### `--clean`
-
-When this flag is used, scaffx looks for an ignore file to filter out noise:
-
-1. Looks for `.gitignore` in the current directory
-2. If not found, falls back to the built-in [`scaffx.ignore`](./templates/files/scaffx.ignore)
-
-```bash
-scaffx tree --clean           # uses .gitignore if present, else scaffx.ignore
-scaffx snapshot --clean       # same resolution logic
-```
-
-The header shows which source is active:
-
-```
-  my-project               ->  tree  --clean (.gitignore)
-  my-project               ->  tree  --clean (scaffx.ignore)
-```
-
-[`scaffx.ignore`](./templates/files/scaffx.ignore) covers common noise across OS, editors, dependencies, build artifacts, and more — so it works out of the box on any project type.
-
----
-
 ### `scaffx count`
 
 Counts the total number of items in the current directory recursively.
@@ -165,9 +142,35 @@ Shows the total disk size of all files in the current directory recursively. Aut
 
 ```bash
 scaffx size
+scaffx size --clean
 ```
 
-If the directory exceeds 200 files, scaffx will ask for confirmation before proceeding.
+If the directory exceeds 500 files, scaffx will ask for confirmation before proceeding.
+
+---
+
+### `--clean`
+
+When this flag is used, scaffx looks for an ignore file to filter out noise:
+
+1. Looks for `.gitignore` in the current directory
+2. If not found, falls back to the built-in [`scaffx.ignore`](./templates/files/scaffx.ignore)
+
+```bash
+scaffx tree --clean           # uses .gitignore if present, else scaffx.ignore
+scaffx snapshot --clean       # same resolution logic
+scaffx count --clean          # excludes ignored entries from the total
+scaffx size --clean           # excludes ignored entries from the size calculation
+```
+
+The header shows which source is active:
+
+```
+  my-project               ->  tree  --clean (.gitignore)
+  my-project               ->  tree  --clean (scaffx.ignore)
+```
+
+[`scaffx.ignore`](./templates/files/scaffx.ignore) covers common noise across OS, editors, dependencies, build artifacts, and more — so it works out of the box on any project type.
 
 ---
 

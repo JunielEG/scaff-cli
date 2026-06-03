@@ -4,7 +4,7 @@
     [string[]]$rest
 )
 
-$DIRSIZELIMIT = 200
+$DIRSIZELIMIT = 500
 
 $FILETEMPLATES = Join-Path $PSScriptRoot "templates/files"
 # $ARCHTEMPLATES = Join-Path $PSScriptRoot "templates/architectures"
@@ -17,6 +17,7 @@ $cmd2 = if ($positional.Count -gt 0) { $positional[0] } else { "" }
 
 $filesOnly = $flags -contains "--files-only"
 $dirsOnly = $flags -contains "--dirs-only"
+# $clean = $flags -contains "--clean" -or "--clear"
 $clean = $flags -contains "--clean"
 $pathMode = $flags -contains "--path"
 
@@ -29,7 +30,7 @@ if ($filesOnly -and $dirsOnly) {
 
 # Flags incompatibles por comando
 $fileOnlyCommands = @("count", "size")         # --dirs-only no aplica
-$cleanOnlyCommands = @("ignore", "watch", "find", "count", "size", "diff") # --clean no aplica
+$cleanOnlyCommands = @("ignore", "watch", "find", "diff") # --clean no aplica
 $pathOnlyCommands = @("watch", "diff", "snapshot", "count", "size")
 
 if (($filesOnly -or $dirsOnly) -and $cmd1 -in @("watch", "diff", "ignore")) {
@@ -219,12 +220,32 @@ function Test-Ignored {
     return $false
 }
 
-function Get-DirItemCount([string]$path, [bool]$filesOnly = $false) {
-    $params = @{ LiteralPath = $path; Recurse = $true; ErrorAction = "SilentlyContinue" }
-    if ($filesOnly) { $params["File"] = $true }
-    return (Get-ChildItem @params).Count
-}
+function Get-DirItemCount([string]$path, [bool]$filesOnly = $false, [string[]]$ignorePatterns = @()) {
+    if ($ignorePatterns.Count -eq 0) {
+        $items = Get-ChildItem -LiteralPath $path -Recurse -ErrorAction SilentlyContinue
+        if ($filesOnly) { $items = $items | Where-Object { -not $_.PSIsContainer } }
+        return @($items).Count
+    }
 
+    $count = 0
+    $queue = [System.Collections.Generic.Queue[string]]::new()
+    $queue.Enqueue($path)
+
+    while ($queue.Count -gt 0) {
+        $current = $queue.Dequeue()
+        foreach ($item in (Get-ChildItem -LiteralPath $current -ErrorAction SilentlyContinue)) {
+            if (Test-Ignored -item $item -patterns $ignorePatterns) { continue }
+            if ($item.PSIsContainer) {
+                $queue.Enqueue($item.FullName)
+                if (-not $filesOnly) { $count++ }
+            } else {
+                $count++
+            }
+        }
+    }
+
+    return $count
+}
 function Get-TreeLines {
     param(
         [string]$path,
@@ -386,7 +407,7 @@ function Show-Tree {
     $root = Get-Root
     $filterLabel = Get-FilterLabel
     $ignoreCtx = Get-IgnoreContext
-    $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly
+    $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly -ignorePatterns $ignoreCtx.patterns
     
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
@@ -399,7 +420,7 @@ function Write-Snapshot {
     $rootItem = Get-Root
     
     $ignoreCtx = Get-IgnoreContext
-    $count = Get-DirItemCount -path $rootItem.FullName -filesOnly $filesOnly
+    $count = Get-DirItemCount -path $rootItem.FullName -filesOnly $filesOnly -ignorePatterns $ignoreCtx.patterns
     $rootName = $rootItem.Name
     $outFile = Join-Path $rootItem.FullName "$rootName.yaml"
     $filterLabel = Get-FilterLabel
@@ -430,7 +451,9 @@ function Write-Snapshot {
 function Show-Count {
     $root = Get-Root
     $filterLabel = Get-FilterLabel
-    $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly
+    $ignoreCtx = Get-IgnoreContext
+    $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly -ignorePatterns $ignoreCtx.patterns
+    
 
     Write-Header $root.Name "count" $filterLabel.Trim()
     Write-Row "archivos" "$count elementos" "ok"
@@ -439,23 +462,38 @@ function Show-Count {
 
 function Show-Size {
     $root = Get-Root
-    $count = Get-DirItemCount -path $root.FullName -filesOnly $true
+    $ignoreCtx = Get-IgnoreContext
+    $count = Get-DirItemCount -path $root.FullName -filesOnly $true -ignorePatterns $ignoreCtx.patterns
 
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count archivos, puede tardar" "Desea continuar?")) { return }
 
-    $bytes = (Get-ChildItem -LiteralPath $root.FullName -Recurse -File -ErrorAction SilentlyContinue |
-        Measure-Object -Property Length -Sum).Sum
+    $bytes = if ($ignoreCtx.patterns.Count -gt 0) {
+        $queue = [System.Collections.Generic.Queue[string]]::new()
+        $queue.Enqueue($root.FullName)
+        $total = 0L
+        while ($queue.Count -gt 0) {
+            $current = $queue.Dequeue()
+            foreach ($item in (Get-ChildItem -LiteralPath $current -ErrorAction SilentlyContinue)) {
+                if (Test-Ignored -item $item -patterns $ignoreCtx.patterns) { continue }
+                if ($item.PSIsContainer) { $queue.Enqueue($item.FullName) }
+                else { $total += $item.Length }
+            }
+        }
+        $total
+    } else {
+        (Get-ChildItem -LiteralPath $root.FullName -Recurse -File -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+    }
 
     $sizeStr = if ($bytes -ge 1GB) { "{0:N2} GB" -f ($bytes / 1GB) }
     elseif ($bytes -ge 1MB) { "{0:N2} MB" -f ($bytes / 1MB) }
     elseif ($bytes -ge 1KB) { "{0:N2} KB" -f ($bytes / 1KB) }
     else { "$bytes B" }
 
-    Write-Header $root.Name "size"
+    Write-Header $root.Name "size" $ignoreCtx.label.Trim()
     Write-Row "peso" $sizeStr "ok"
     Write-Host ""
 }
-
 
 function Show-Find {
     $patterns = $positional
@@ -502,7 +540,8 @@ function Show-Diff {
         return
     }
 
-    $count = Get-DirItemCount -path $rootItem.FullName -filesOnly $false
+    $ignoreCtx = Get-IgnoreContext
+    $count = Get-DirItemCount -path $root.FullName -filesOnly $filesOnly -ignorePatterns $ignoreCtx.patterns    
     if ($count -gt $DIRSIZELIMIT -and -not (Confirm "el directorio tiene $count elementos!" "Desea continuar?")) { return }
 
     Write-Header $rootItem.Name "diff" "" "$rootName.yaml"
